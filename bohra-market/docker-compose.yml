@@ -1,0 +1,153 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────
+# Bohra Market — all 6 services in one compose file
+#
+# Usage:
+#   cp .env.example .env          # fill in your real keys
+#   docker compose up --build
+#
+# Ports:
+#   User     frontend  → http://localhost:3000
+#   Admin    frontend  → http://localhost:3001
+#   Vendor   frontend  → http://localhost:3002
+#   User     backend   → http://localhost:8000
+#   Admin    backend   → http://localhost:8001
+#   Vendor   backend   → http://localhost:8002
+# ─────────────────────────────────────────────────────────────
+
+x-backend-env: &backend-env
+  SUPABASE_URL: ${SUPABASE_URL}
+  SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+  SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+  RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
+  SECRET_KEY: ${SECRET_KEY}
+  ALGORITHM: HS256
+  ACCESS_TOKEN_EXPIRE_MINUTES: 10080
+  ENVIRONMENT: production
+
+services:
+
+  # ── User Backend ─────────────────────────────────────────────
+  user-backend:
+    build:
+      context: ./apps/user/backend
+      dockerfile: Dockerfile
+    container_name: bohra-user-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *backend-env
+      ALLOWED_ORIGINS: ${NEXT_PUBLIC_USER_APP_URL:-http://localhost:3000}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── Admin Backend ────────────────────────────────────────────
+  admin-backend:
+    build:
+      context: ./apps/admin/backend
+      dockerfile: Dockerfile
+    container_name: bohra-admin-backend
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      <<: *backend-env
+      ALLOWED_ORIGINS: ${NEXT_PUBLIC_ADMIN_APP_URL:-http://localhost:3001}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── Vendor Backend ───────────────────────────────────────────
+  vendor-backend:
+    build:
+      context: ./apps/vendor/backend
+      dockerfile: Dockerfile
+    container_name: bohra-vendor-backend
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      <<: *backend-env
+      ALLOWED_ORIGINS: ${NEXT_PUBLIC_VENDOR_APP_URL:-http://localhost:3002}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── User Frontend ────────────────────────────────────────────
+  user-frontend:
+    build:
+      context: ./apps/user/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_USER_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_USER_APP_URL:-http://localhost:3000}
+    container_name: bohra-user-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      user-backend:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+
+  # ── Admin Frontend ───────────────────────────────────────────
+  admin-frontend:
+    build:
+      context: ./apps/admin/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_ADMIN_API_URL:-http://localhost:8001}
+        NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_ADMIN_APP_URL:-http://localhost:3001}
+    container_name: bohra-admin-frontend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    depends_on:
+      admin-backend:
+        condition: service_healthy
+    environment:
+      PORT: 3001
+      NODE_ENV: production
+
+  # ── Vendor Frontend ──────────────────────────────────────────
+  vendor-frontend:
+    build:
+      context: ./apps/vendor/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_VENDOR_API_URL:-http://localhost:8002}
+        NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_VENDOR_APP_URL:-http://localhost:3002}
+    container_name: bohra-vendor-frontend
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    depends_on:
+      vendor-backend:
+        condition: service_healthy
+    environment:
+      PORT: 3002
+      NODE_ENV: production
